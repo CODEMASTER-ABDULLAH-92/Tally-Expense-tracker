@@ -1,6 +1,6 @@
 "use client"
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Loader2, RefreshCw, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, RefreshCw, X, Plus, Minus } from "lucide-react";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 
@@ -42,12 +42,12 @@ export default function ExpenseTable() {
   const [data, setData] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [expandedDays, setExpandedDays] = useState({});
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Generate days array
   const days = useMemo(() => {
     return Array.from({ length: daysInMonth }, (_, i) => {
       const date = new Date(year, month, i + 1);
@@ -60,7 +60,6 @@ export default function ExpenseTable() {
     });
   }, [year, month, daysInMonth]);
 
-  // Fetch data for the current month
   const fetchMonthData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -83,7 +82,6 @@ export default function ExpenseTable() {
         throw new Error(result.error || "Failed to fetch expenses");
       }
 
-      // Group expenses by date and category, keeping every entry (with its description)
       const formattedData = {};
       result.data.forEach((expense) => {
         const dateKey = expense.date;
@@ -112,7 +110,6 @@ export default function ExpenseTable() {
     fetchMonthData();
   }, [fetchMonthData]);
 
-  // Delete a single entry — the only edit action left in this view
   const deleteExpense = async (dateKey, category, expenseId) => {
     if (!confirm("Delete this expense?")) return;
 
@@ -144,7 +141,13 @@ export default function ExpenseTable() {
     }
   };
 
-  // Calculate totals
+  const toggleDayExpand = (dateKey) => {
+    setExpandedDays(prev => ({
+      ...prev,
+      [dateKey]: !prev[dateKey]
+    }));
+  };
+
   const rowTotal = (day) => {
     const dateKey = getDateKey(year, month, day);
     let total = 0;
@@ -168,21 +171,18 @@ export default function ExpenseTable() {
 
   const grandTotal = categories.reduce((sum, c) => sum + columnTotal(c.key), 0);
 
-  // Navigate months
   const shiftMonth = (delta) => {
     setCursor(new Date(year, month + delta, 1));
     setData({});
     setError(null);
-  };
-
-  const getCellTotal = (dateKey, categoryKey) => {
-    if (data[dateKey]?.[categoryKey]) {
-      return data[dateKey][categoryKey].reduce((sum, item) => sum + item.amount, 0);
-    }
-    return 0;
+    setExpandedDays({});
   };
 
   const getCellItems = (dateKey, categoryKey) => data[dateKey]?.[categoryKey] || [];
+
+  const hasExpenses = (dateKey) => {
+    return categories.some(c => getCellItems(dateKey, c.key).length > 0);
+  };
 
   return (
     <>
@@ -244,7 +244,7 @@ export default function ExpenseTable() {
                 <table className="w-full border-collapse text-sm">
                   <thead className="sticky top-0 z-10 bg-[#F0EDE3]">
                     <tr>
-                      <th className="w-14 px-4 py-3 text-left font-medium text-[#6B6457]">
+                      <th className="w-14 px-3 py-3 text-left font-medium text-[#6B6457]">
                         Date
                       </th>
                       <th className="w-16 px-2 py-3 text-left font-medium text-[#6B6457]">
@@ -253,7 +253,7 @@ export default function ExpenseTable() {
                       {categories.map((c) => (
                         <th
                           key={c.key}
-                          className="min-w-[190px] px-3 py-3 text-left font-medium text-[#6B6457]"
+                          className="min-w-[200px] px-3 py-3 text-left font-medium text-[#6B6457]"
                         >
                           <span className="inline-flex items-center gap-1.5">
                             <span
@@ -264,86 +264,141 @@ export default function ExpenseTable() {
                           </span>
                         </th>
                       ))}
-                      <th className="min-w-[90px] px-4 py-3 text-right font-semibold text-[#221F1B]">
+                      <th className="min-w-[100px] px-4 py-3 text-right font-semibold text-[#221F1B]">
                         Total
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {days.map((d) => (
-                      <tr
-                        key={d.day}
-                        className={`border-t border-[#EFEBE0] ${
-                          d.isWeekend ? "bg-[#FBF3EC]" : ""
-                        }`}
-                      >
-                        <td className="px-4 py-2.5 align-top font-medium text-[#221F1B]">
-                          {d.day}
-                        </td>
-                        <td className="px-2 py-2.5 align-top text-[#8A8473]">
-                          {d.weekday}
-                        </td>
-                        {categories.map((c) => {
-                          const items = getCellItems(d.dateKey, c.key);
-                          const total = getCellTotal(d.dateKey, c.key);
+                    {days.map((d) => {
+                      const dayHasExpenses = hasExpenses(d.dateKey);
+                      const isExpanded = expandedDays[d.dateKey] || false;
+                      const dayTotal = rowTotal(d.day);
+                      
+                      return (
+                        <tr
+                          key={d.day}
+                          className={`border-t border-[#EFEBE0] transition-colors ${
+                            d.isWeekend ? "bg-[#FBF3EC]" : ""
+                          } ${dayHasExpenses ? "hover:bg-[#F8F6F0]" : ""}`}
+                        >
+                          <td className="px-3 py-3 align-top font-medium text-[#221F1B]">
+                            {d.day}
+                          </td>
+                          <td className="px-2 py-3 align-top text-[#8A8473]">
+                            {d.weekday}
+                          </td>
+                          {categories.map((c) => {
+                            const items = getCellItems(d.dateKey, c.key);
+                            const total = items.reduce((sum, item) => sum + item.amount, 0);
+                            
+                            if (items.length === 0) {
+                              return (
+                                <td key={c.key} className="px-3 py-3 align-top">
+                                  <span className="text-xs text-[#C7C2B3]">—</span>
+                                </td>
+                              );
+                            }
 
-                          return (
-                            <td key={c.key} className="px-2 py-2 align-top">
-                              {items.length === 0 ? (
-                                <span className="text-xs text-[#C7C2B3]">—</span>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  {items.map((item) => (
+                            const showExpand = items.length > 2;
+                            const displayItems = isExpanded ? items : items.slice(0, 2);
+
+                            return (
+                              <td key={c.key} className="px-3 py-3 align-top">
+                                <div className="space-y-2">
+                                  {displayItems.map((item, idx) => (
                                     <div
                                       key={item.id}
-                                      className="flex items-start justify-between gap-2 rounded-md bg-[#FBF9F4] px-2 py-1.5"
+                                      className="relative rounded-lg border border-[#E8E4D8] bg-white px-3 py-2 transition-all hover:border-[#D97757] hover:shadow-sm"
                                     >
-                                      <div className="min-w-0">
-                                        <p className="text-xs leading-snug text-[#403C34]">
-                                          {item.description}
-                                        </p>
-                                        {item.time && (
-                                          <p className="mt-0.5 text-[10px] text-[#A39E8E]">
-                                            {formatDisplayTime(item.time)}
+                                      {/* Entry divider line */}
+                                      {idx > 0 && (
+                                        <div className="absolute -top-2 left-3 right-3 h-px bg-gradient-to-r from-transparent via-[#E3DFD2] to-transparent" />
+                                      )}
+                                      
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs leading-relaxed text-[#403C34]">
+                                            {item.description}
                                           </p>
-                                        )}
-                                      </div>
-                                      <div className="flex flex-shrink-0 items-center gap-1.5">
-                                        <span className="text-xs font-semibold text-[#221F1B]">
-                                          {formatCurrency(item.amount)}
-                                        </span>
-                                        <button
-                                          onClick={() =>
-                                            deleteExpense(d.dateKey, c.key, item.id)
-                                          }
-                                          aria-label="Delete entry"
-                                          className="text-[#C7C2B3] hover:text-[#B3493A]"
-                                        >
-                                          <X size={11} />
-                                        </button>
+                                          {item.time && (
+                                            <p className="mt-0.5 text-[10px] text-[#A39E8E]">
+                                              {formatDisplayTime(item.time)}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <div className="flex flex-shrink-0 items-center gap-2">
+                                          <span className="text-xs font-semibold text-[#221F1B]">
+                                            {formatCurrency(item.amount)}
+                                          </span>
+                                          <button
+                                            onClick={() =>
+                                              deleteExpense(d.dateKey, c.key, item.id)
+                                            }
+                                            aria-label="Delete entry"
+                                            className="rounded-full p-0.5 text-[#C7C2B3] opacity-0 transition-all hover:bg-[#F5F0E8] hover:text-[#B3493A] group-hover:opacity-100"
+                                          >
+                                            <X size={12} />
+                                          </button>
+                                        </div>
                                       </div>
                                     </div>
                                   ))}
+                                  
+                                  {showExpand && (
+                                    <button
+                                      onClick={() => toggleDayExpand(d.dateKey)}
+                                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#E3DFD2] px-3 py-1.5 text-[10px] font-medium text-[#8A8473] transition-all hover:border-[#C7C2B3] hover:bg-[#F8F6F0] hover:text-[#6B6457]"
+                                    >
+                                      {isExpanded ? (
+                                        <>
+                                          <Minus size={13} />
+                                          <span>Show fewer entries</span>
+                                          <span className="ml-1 rounded-full bg-[#EFEBE0] px-2 py-0.5 text-[9px]">
+                                            {items.length}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Plus size={13} />
+                                          <span>Show {items.length - 2} more entries</span>
+                                          <span className="ml-1 rounded-full bg-[#EFEBE0] px-2 py-0.5 text-[9px]">
+                                            {items.length}
+                                          </span>
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+                                  
                                   {items.length > 1 && (
-                                    <p className="px-2 text-right text-[10px] font-semibold text-[#8A8473]">
-                                      {c.label} total: {formatCurrency(total)}
-                                    </p>
+                                    <div className="flex items-center justify-end gap-2 pt-1">
+                                      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[#EFEBE0] to-transparent" />
+                                      <span className="text-[10px] font-semibold text-[#8A8473]">
+                                        Subtotal: {formatCurrency(total)}
+                                      </span>
+                                    </div>
                                   )}
                                 </div>
-                              )}
-                            </td>
-                          );
-                        })}
-                        <td className="px-4 py-2.5 text-right align-top font-semibold text-[#221F1B]">
-                          {rowTotal(d.day) > 0 ? formatCurrency(rowTotal(d.day)) : "—"}
-                        </td>
-                      </tr>
-                    ))}
+                              </td>
+                            );
+                          })}
+                          <td className="px-4 py-3 text-right align-top">
+                            {dayTotal > 0 ? (
+                              <span className="inline-flex items-center rounded-full bg-[#F0EDE3] px-3 py-1.5 text-xs font-semibold text-[#221F1B]">
+                                {formatCurrency(dayTotal)}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-[#C7C2B3]">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                   <tfoot className="sticky bottom-0 bg-[#F0EDE3]">
                     <tr className="border-t-2 border-[#E3DFD2]">
-                      <td className="px-4 py-3 font-semibold text-[#221F1B]" colSpan={2}>
-                        Total
+                      <td className="px-3 py-3 font-semibold text-[#221F1B]" colSpan={2}>
+                        Monthly Total
                       </td>
                       {categories.map((c) => (
                         <td
@@ -353,7 +408,7 @@ export default function ExpenseTable() {
                           {formatCurrency(columnTotal(c.key))}
                         </td>
                       ))}
-                      <td className="px-4 py-3 text-right font-serif text-base text-[#D97757]">
+                      <td className="px-4 py-3 text-right font-serif text-lg text-[#D97757]">
                         {formatCurrency(grandTotal)}
                       </td>
                     </tr>
@@ -363,12 +418,24 @@ export default function ExpenseTable() {
             )}
           </div>
 
-          <div className="mt-4 flex items-center justify-between text-sm text-[#8A8473]">
-            <p>Every entry shows what it was for — head to the expense form to log new ones.</p>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-full bg-[#D97757]" />
-              Weekend
-            </span>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[#8A8473]">
+            <div className="flex items-center gap-5">
+              <span className="inline-flex items-center gap-2">
+                <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#D97757]" />
+                <span>Weekend</span>
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#8A9A7E]" />
+                <span>Has expenses</span>
+              </span>
+              <span className="inline-flex items-center gap-2 text-[#A39E8E]">
+                <span className="inline-block h-px w-8 bg-[#E3DFD2]" />
+                <span>Entry divider</span>
+              </span>
+            </div>
+            <p className="text-xs text-[#A39E8E]">
+              Click <span className="font-medium text-[#8A8473]">"Show more"</span> to view all entries
+            </p>
           </div>
         </div>
       </section>

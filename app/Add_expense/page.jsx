@@ -428,7 +428,7 @@ export default function ExpenseForm() {
                 type="button"
                 onClick={handleSubmit}
                 disabled={saving}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-[#D97757] px-5 py-3 text-[15px] font-medium text-white shadow-sm transition-colors hover:bg-[#C2613F] disabled:opacity-60"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-[#D97757] px-5 py-3 text-[15px] font-medium text-black shadow-sm transition-colors hover:bg-[#C2613F] disabled:opacity-60"
               >
                 {saving ? (
                   <>

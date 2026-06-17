@@ -3,10 +3,7 @@ import { useState } from "react";
 import { Menu, X } from "lucide-react";
 
 const navLinks = [
-  { label: "Features", href: "#features" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "Budget Guide", href: "#guide" },
-  { label: "Reviews", href: "#reviews" },
+  { label: "Adding Expense", href: "/Add_expense" },
 ];
 
 export default function Navbar() {
@@ -42,14 +39,14 @@ export default function Navbar() {
         {/* Desktop actions */}
         <div className="hidden items-center gap-5 md:flex">
           <a
-            href="#login"
+            href="/Login"
             className="text-[15px] font-medium text-[#6B6457] transition-colors hover:text-[#221F1B]"
           >
             Log in
           </a>
           <a
-            href="#start"
-            className="rounded-full bg-[#D97757] px-5  py-2.5 text-[15px] font-medium text-[#000] shadow-sm transition-colors hover:bg-[#C2613F]"
+            href="/Track_expense"
+            className="rounded-full bg-[#D97757] px-5  py-2.5 text-[15px] font-medium text-black shadow-sm transition-colors hover:bg-[#C2613F]"
           >
             Start tracking free
           </a>

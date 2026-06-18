@@ -81,12 +81,12 @@ export default function Navbar() {
             ))}
           </ul>
           <div className="mt-4 flex flex-col gap-3 border-t border-[#E3DFD2] pt-4">
-            <a href="#login" className="text-[15px] font-medium text-[#403C34]">
+            <a href="/Login" className="text-[15px] font-medium text-[#403C34]">
               Log in
             </a>
             <a
-              href="#start"
-              className="rounded-full bg-[#D97757] px-5 py-2.5 text-center text-[15px] font-medium text-white"
+              href="/Track_expense"
+              className="rounded-full bg-[#D97757]  py-2.5  text-[15px] font-medium text-[#403c34]"
             >
               Start tracking free
             </a>

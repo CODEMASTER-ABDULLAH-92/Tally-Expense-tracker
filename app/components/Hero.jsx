@@ -39,16 +39,10 @@ export default function Hero() {
 
           <div className="mt-9 flex flex-wrap items-center gap-5">
             <a
-              href="#start"
-              className="rounded-full bg-[#D97757] px-7 py-3.5 text-[15px] font-medium text-white shadow-sm transition-colors hover:bg-[#C2613F]"
-            >
-              Start tracking free
-            </a>
-            <a
-              href="#how-it-works"
+              href="/Track_expense"
               className="group inline-flex items-center gap-1.5 text-[15px] font-medium text-[#221F1B]"
-            >
-              See how it works
+              >
+              Start tracking free
               <ArrowRight
                 size={16}
                 className="transition-transform group-hover:translate-x-0.5"

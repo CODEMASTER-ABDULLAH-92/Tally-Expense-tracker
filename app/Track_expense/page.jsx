@@ -1,8 +1,10 @@
 "use client"
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Loader2, RefreshCw, X, Plus, Minus } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { ChevronLeft, ChevronRight, Loader2, RefreshCw, X, Plus, Minus, Download, Printer } from "lucide-react";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 const categories = [
   { key: "food", label: "Food", color: "#8A9A7E" },
@@ -43,6 +45,8 @@ export default function ExpenseTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedDays, setExpandedDays] = useState({});
+  const [exporting, setExporting] = useState(false);
+  const tableRef = useRef(null);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -184,12 +188,123 @@ export default function ExpenseTable() {
     return categories.some(c => getCellItems(dateKey, c.key).length > 0);
   };
 
+  // Export to PDF function
+  const exportToPDF = async () => {
+    if (!tableRef.current) return;
+    
+    setExporting(true);
+    try {
+      // Expand all days to show all entries
+      const allDateKeys = days.map(d => d.dateKey);
+      const expandedState = {};
+      allDateKeys.forEach(key => {
+        if (hasExpenses(key)) {
+          expandedState[key] = true;
+        }
+      });
+      setExpandedDays(expandedState);
+      
+      // Wait for re-render
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      const element = tableRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2.5,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        width: element.scrollWidth,
+        height: element.scrollHeight,
+        windowWidth: element.scrollWidth,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('l', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      // Calculate image dimensions
+      const margin = 15;
+      const maxWidth = pdfWidth - (margin * 2);
+      const maxHeight = pdfHeight - (margin * 2);
+      
+      let imgWidth = maxWidth;
+      let imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      // If image height exceeds page height, scale down
+      if (imgHeight > maxHeight) {
+        imgHeight = maxHeight;
+        imgWidth = (canvas.width * imgHeight) / canvas.height;
+      }
+
+      // Add header
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(34, 31, 27);
+      pdf.text(`Expense Report - ${monthNames[month]} ${year}`, pdfWidth / 2, margin - 2, { align: 'center' });
+      
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(107, 100, 87);
+      pdf.text(`Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`, pdfWidth / 2, margin + 4, { align: 'center' });
+
+      // Add horizontal line
+      pdf.setDrawColor(227, 223, 210);
+      pdf.line(margin, margin + 7, pdfWidth - margin, margin + 7);
+
+      // Add the table image
+      const tableY = margin + 10;
+      pdf.addImage(imgData, 'PNG', margin, tableY, imgWidth, imgHeight);
+
+      // Add footer with page numbers
+      const totalPages = Math.ceil((imgHeight + tableY) / pdfHeight);
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(163, 158, 142);
+        pdf.text(`Page ${i} of ${totalPages}`, pdfWidth - margin, pdfHeight - 5);
+        pdf.text(`Generated on ${new Date().toLocaleString()}`, margin, pdfHeight - 5);
+      }
+
+      pdf.save(`Expense_Report_${monthNames[month]}_${year}.pdf`);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('Failed to export PDF. Please try again.');
+    } finally {
+      setExporting(false);
+      // Reset expanded state
+      setExpandedDays({});
+    }
+  };
+
+  // Print function
+  const handlePrint = () => {
+    // Expand all days before printing
+    const allDateKeys = days.map(d => d.dateKey);
+    const expandedState = {};
+    allDateKeys.forEach(key => {
+      if (hasExpenses(key)) {
+        expandedState[key] = true;
+      }
+    });
+    setExpandedDays(expandedState);
+    
+    setTimeout(() => {
+      window.print();
+      // Reset after print dialog closes
+      setTimeout(() => {
+        setExpandedDays({});
+      }, 1000);
+    }, 300);
+  };
+
   return (
     <>
       <Navbar />
-      <section className="bg-[#F5F3EC] px-6 py-10 lg:px-8">
+      <section className="bg-[#F5F3EC] px-6 py-10 lg:px-8 print:bg-white print:px-2 print:py-2">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-4 print:hidden">
             <div>
               <p className="text-sm font-medium text-[#8A5A3F]">Daily ledger</p>
               <h2 className="font-serif text-3xl text-[#221F1B]">
@@ -204,6 +319,26 @@ export default function ExpenseTable() {
               >
                 <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
                 Refresh
+              </button>
+              <button
+                onClick={exportToPDF}
+                disabled={exporting || loading}
+                className="flex items-center gap-2 rounded-full border border-[#D97757] bg-[#D97757] px-4 py-1.5 text-sm text-[#6B6457] hover:bg-[#C76A4A] disabled:opacity-50"
+              >
+                {exporting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Download size={14} />
+                )}
+                Export PDF
+              </button>
+              <button
+                onClick={handlePrint}
+                disabled={loading}
+                className="flex items-center gap-2 rounded-full border border-[#6B86A8] bg-[#6B86A8] px-4 py-1.5 text-sm text-white hover:bg-[#5A7598] disabled:opacity-50"
+              >
+                <Printer size={14} />
+                Print
               </button>
               <div className="flex items-center gap-1 rounded-full border border-[#E3DFD2] bg-white p-1">
                 <button
@@ -228,43 +363,43 @@ export default function ExpenseTable() {
           </div>
 
           {error && (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 print:hidden">
               {error}
             </div>
           )}
 
-          <div className="overflow-hidden rounded-2xl border border-[#E3DFD2] bg-white shadow-[0_20px_50px_-30px_rgba(34,31,27,0.15)]">
+          <div className="overflow-hidden rounded-2xl border border-[#E3DFD2] bg-white shadow-[0_20px_50px_-30px_rgba(34,31,27,0.15)] print:shadow-none print:border print:rounded-none print:overflow-visible">
             {loading ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="h-8 w-8 animate-spin text-[#D97757]" />
                 <span className="ml-3 text-[#6B6457]">Loading expenses...</span>
               </div>
             ) : (
-              <div className="max-h-[640px] overflow-auto">
-                <table className="w-full border-collapse text-sm">
-                  <thead className="sticky top-0 z-10 bg-[#F0EDE3]">
+              <div className="max-h-[640px] overflow-auto print:max-h-none print:overflow-visible" ref={tableRef}>
+                <table className="w-full border-collapse text-sm print:text-[8px] print:table-auto">
+                  <thead className="sticky top-0 z-10 bg-[#F0EDE3] print:bg-gray-100 print:static">
                     <tr>
-                      <th className="w-14 px-3 py-3 text-left font-medium text-[#6B6457]">
+                      <th className="w-14 px-3 py-3 text-left font-medium text-[#6B6457] print:px-1.5 print:py-1 print:text-[8px]">
                         Date
                       </th>
-                      <th className="w-16 px-2 py-3 text-left font-medium text-[#6B6457]">
+                      <th className="w-16 px-2 py-3 text-left font-medium text-[#6B6457] print:px-1.5 print:py-1 print:text-[8px]">
                         Day
                       </th>
                       {categories.map((c) => (
                         <th
                           key={c.key}
-                          className="min-w-[200px] px-3 py-3 text-left font-medium text-[#6B6457]"
+                          className="min-w-[200px] px-3 py-3 text-left font-medium text-[#6B6457] print:min-w-[80px] print:px-1.5 print:py-1 print:text-[8px]"
                         >
                           <span className="inline-flex items-center gap-1.5">
                             <span
-                              className="h-1.5 w-1.5 rounded-full"
+                              className="h-1.5 w-1.5 rounded-full print:hidden"
                               style={{ backgroundColor: c.color }}
                             />
                             {c.label}
                           </span>
                         </th>
                       ))}
-                      <th className="min-w-[100px] px-4 py-3 text-right font-semibold text-[#221F1B]">
+                      <th className="min-w-[100px] px-4 py-3 text-right font-semibold text-[#221F1B] print:px-1.5 print:py-1 print:text-[8px]">
                         Total
                       </th>
                     </tr>
@@ -278,14 +413,14 @@ export default function ExpenseTable() {
                       return (
                         <tr
                           key={d.day}
-                          className={`border-t border-[#EFEBE0] transition-colors ${
-                            d.isWeekend ? "bg-[#FBF3EC]" : ""
+                          className={`border-t border-[#EFEBE0] transition-colors print:border print:border-gray-200 ${
+                            d.isWeekend ? "bg-[#FBF3EC] print:bg-gray-50" : ""
                           } ${dayHasExpenses ? "hover:bg-[#F8F6F0]" : ""}`}
                         >
-                          <td className="px-3 py-3 align-top font-medium text-[#221F1B]">
+                          <td className="px-3 py-3 align-top font-medium text-[#221F1B] print:px-1.5 print:py-1 print:text-[8px]">
                             {d.day}
                           </td>
-                          <td className="px-2 py-3 align-top text-[#8A8473]">
+                          <td className="px-2 py-3 align-top text-[#8A8473] print:px-1.5 print:py-1 print:text-[8px]">
                             {d.weekday}
                           </td>
                           {categories.map((c) => {
@@ -294,8 +429,8 @@ export default function ExpenseTable() {
                             
                             if (items.length === 0) {
                               return (
-                                <td key={c.key} className="px-3 py-3 align-top">
-                                  <span className="text-xs text-[#C7C2B3]">—</span>
+                                <td key={c.key} className="px-3 py-3 align-top print:px-1.5 print:py-1">
+                                  <span className="text-xs text-[#C7C2B3] print:text-[7px]">—</span>
                                 </td>
                               );
                             }
@@ -304,31 +439,30 @@ export default function ExpenseTable() {
                             const displayItems = isExpanded ? items : items.slice(0, 2);
 
                             return (
-                              <td key={c.key} className="px-3 py-3 align-top">
-                                <div className="space-y-2">
+                              <td key={c.key} className="px-3 py-3 align-top print:px-1.5 print:py-1">
+                                <div className="space-y-2 print:space-y-0.5">
                                   {displayItems.map((item, idx) => (
                                     <div
                                       key={item.id}
-                                      className="relative rounded-lg border border-[#E8E4D8] bg-white px-3 py-2 transition-all hover:border-[#D97757] hover:shadow-sm"
+                                      className="relative rounded-lg border border-[#E8E4D8] bg-white px-3 py-2 transition-all print:border-none print:px-1 print:py-0.5 hover:border-[#D97757] hover:shadow-sm"
                                     >
-                                      {/* Entry divider line */}
                                       {idx > 0 && (
-                                        <div className="absolute -top-2 left-3 right-3 h-px bg-gradient-to-r from-transparent via-[#E3DFD2] to-transparent" />
+                                        <div className="absolute -top-2 left-3 right-3 h-px bg-gradient-to-r from-transparent via-[#E3DFD2] to-transparent print:hidden" />
                                       )}
                                       
-                                      <div className="flex items-start justify-between gap-3">
+                                      <div className="flex items-start justify-between gap-3 print:gap-1">
                                         <div className="flex-1 min-w-0">
-                                          <p className="text-xs leading-relaxed text-[#403C34]">
+                                          <p className="text-xs leading-relaxed text-[#403C34] print:text-[7px] print:leading-tight">
                                             {item.description}
                                           </p>
                                           {item.time && (
-                                            <p className="mt-0.5 text-[10px] text-[#A39E8E]">
+                                            <p className="mt-0.5 text-[10px] text-[#A39E8E] print:text-[6px] print:mt-0">
                                               {formatDisplayTime(item.time)}
                                             </p>
                                           )}
                                         </div>
-                                        <div className="flex flex-shrink-0 items-center gap-2">
-                                          <span className="text-xs font-semibold text-[#221F1B]">
+                                        <div className="flex flex-shrink-0 items-center gap-2 print:gap-0.5">
+                                          <span className="text-xs font-semibold text-[#221F1B] print:text-[7px]">
                                             {formatCurrency(item.amount)}
                                           </span>
                                           <button
@@ -336,7 +470,7 @@ export default function ExpenseTable() {
                                               deleteExpense(d.dateKey, c.key, item.id)
                                             }
                                             aria-label="Delete entry"
-                                            className="rounded-full p-0.5 text-[#C7C2B3] opacity-0 transition-all hover:bg-[#F5F0E8] hover:text-[#B3493A] group-hover:opacity-100"
+                                            className="rounded-full p-0.5 text-[#C7C2B3] opacity-0 transition-all hover:bg-[#F5F0E8] hover:text-[#B3493A] group-hover:opacity-100 print:hidden"
                                           >
                                             <X size={12} />
                                           </button>
@@ -348,7 +482,7 @@ export default function ExpenseTable() {
                                   {showExpand && (
                                     <button
                                       onClick={() => toggleDayExpand(d.dateKey)}
-                                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#E3DFD2] px-3 py-1.5 text-[10px] font-medium text-[#8A8473] transition-all hover:border-[#C7C2B3] hover:bg-[#F8F6F0] hover:text-[#6B6457]"
+                                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#E3DFD2] px-3 py-1.5 text-[10px] font-medium text-[#8A8473] transition-all hover:border-[#C7C2B3] hover:bg-[#F8F6F0] hover:text-[#6B6457] print:hidden"
                                     >
                                       {isExpanded ? (
                                         <>
@@ -371,7 +505,7 @@ export default function ExpenseTable() {
                                   )}
                                   
                                   {items.length > 1 && (
-                                    <div className="flex items-center justify-end gap-2 pt-1">
+                                    <div className="flex items-center justify-end gap-2 pt-1 print:hidden">
                                       <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[#EFEBE0] to-transparent" />
                                       <span className="text-[10px] font-semibold text-[#8A8473]">
                                         Subtotal: {formatCurrency(total)}
@@ -382,33 +516,33 @@ export default function ExpenseTable() {
                               </td>
                             );
                           })}
-                          <td className="px-4 py-3 text-right align-top">
+                          <td className="px-4 py-3 text-right align-top print:px-1.5 print:py-1">
                             {dayTotal > 0 ? (
-                              <span className="inline-flex items-center rounded-full bg-[#F0EDE3] px-3 py-1.5 text-xs font-semibold text-[#221F1B]">
+                              <span className="inline-flex items-center rounded-full bg-[#F0EDE3] px-3 py-1.5 text-xs font-semibold text-[#221F1B] print:bg-transparent print:px-1 print:py-0.5 print:text-[7px] print:font-bold">
                                 {formatCurrency(dayTotal)}
                               </span>
                             ) : (
-                              <span className="text-xs text-[#C7C2B3]">—</span>
+                              <span className="text-xs text-[#C7C2B3] print:text-[7px]">—</span>
                             )}
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
-                  <tfoot className="sticky bottom-0 bg-[#F0EDE3]">
-                    <tr className="border-t-2 border-[#E3DFD2]">
-                      <td className="px-3 py-3 font-semibold text-[#221F1B]" colSpan={2}>
+                  <tfoot className="sticky bottom-0 bg-[#F0EDE3] print:bg-gray-100 print:static">
+                    <tr className="border-t-2 border-[#E3DFD2] print:border-t-2 print:border-gray-300">
+                      <td className="px-3 py-3 font-semibold text-[#221F1B] print:px-1.5 print:py-1 print:text-[8px]" colSpan={2}>
                         Monthly Total
                       </td>
                       {categories.map((c) => (
                         <td
                           key={c.key}
-                          className="px-3 py-3 text-right font-semibold text-[#221F1B]"
+                          className="px-3 py-3 text-right font-semibold text-[#221F1B] print:px-1.5 print:py-1 print:text-[8px]"
                         >
                           {formatCurrency(columnTotal(c.key))}
                         </td>
                       ))}
-                      <td className="px-4 py-3 text-right font-serif text-lg text-[#D97757]">
+                      <td className="px-4 py-3 text-right font-serif text-lg text-[#D97757] print:px-1.5 print:py-1 print:text-[10px] print:text-[#D97757]">
                         {formatCurrency(grandTotal)}
                       </td>
                     </tr>
@@ -418,7 +552,7 @@ export default function ExpenseTable() {
             )}
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[#8A8473]">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[#8A8473] print:hidden">
             <div className="flex items-center gap-5">
               <span className="inline-flex items-center gap-2">
                 <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#D97757]" />
@@ -436,6 +570,11 @@ export default function ExpenseTable() {
             <p className="text-xs text-[#A39E8E]">
               Click <span className="font-medium text-[#8A8473]">"Show more"</span> to view all entries
             </p>
+          </div>
+
+          {/* Print-only footer */}
+          <div className="hidden print:block mt-2 text-center text-[6px] text-gray-400">
+            <p>Expense Report - {monthNames[month]} {year} | Generated on {new Date().toLocaleString()}</p>
           </div>
         </div>
       </section>

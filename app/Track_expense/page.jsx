@@ -188,96 +188,6 @@ export default function ExpenseTable() {
     return categories.some(c => getCellItems(dateKey, c.key).length > 0);
   };
 
-  // Export to PDF function
-  const exportToPDF = async () => {
-    if (!tableRef.current) return;
-    
-    setExporting(true);
-    try {
-      // Expand all days to show all entries
-      const allDateKeys = days.map(d => d.dateKey);
-      const expandedState = {};
-      allDateKeys.forEach(key => {
-        if (hasExpenses(key)) {
-          expandedState[key] = true;
-        }
-      });
-      setExpandedDays(expandedState);
-      
-      // Wait for re-render
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      const element = tableRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2.5,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        width: element.scrollWidth,
-        height: element.scrollHeight,
-        windowWidth: element.scrollWidth,
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('l', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-
-      // Calculate image dimensions
-      const margin = 15;
-      const maxWidth = pdfWidth - (margin * 2);
-      const maxHeight = pdfHeight - (margin * 2);
-      
-      let imgWidth = maxWidth;
-      let imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      // If image height exceeds page height, scale down
-      if (imgHeight > maxHeight) {
-        imgHeight = maxHeight;
-        imgWidth = (canvas.width * imgHeight) / canvas.height;
-      }
-
-      // Add header
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(34, 31, 27);
-      pdf.text(`Expense Report - ${monthNames[month]} ${year}`, pdfWidth / 2, margin - 2, { align: 'center' });
-      
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(107, 100, 87);
-      pdf.text(`Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`, pdfWidth / 2, margin + 4, { align: 'center' });
-
-      // Add horizontal line
-      pdf.setDrawColor(227, 223, 210);
-      pdf.line(margin, margin + 7, pdfWidth - margin, margin + 7);
-
-      // Add the table image
-      const tableY = margin + 10;
-      pdf.addImage(imgData, 'PNG', margin, tableY, imgWidth, imgHeight);
-
-      // Add footer with page numbers
-      const totalPages = Math.ceil((imgHeight + tableY) / pdfHeight);
-      for (let i = 1; i <= totalPages; i++) {
-        pdf.setPage(i);
-        pdf.setFontSize(7);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(163, 158, 142);
-        pdf.text(`Page ${i} of ${totalPages}`, pdfWidth - margin, pdfHeight - 5);
-        pdf.text(`Generated on ${new Date().toLocaleString()}`, margin, pdfHeight - 5);
-      }
-
-      pdf.save(`Expense_Report_${monthNames[month]}_${year}.pdf`);
-    } catch (error) {
-      console.error('Error exporting PDF:', error);
-      alert('Failed to export PDF. Please try again.');
-    } finally {
-      setExporting(false);
-      // Reset expanded state
-      setExpandedDays({});
-    }
-  };
-
   // Print function
   const handlePrint = () => {
     // Expand all days before printing
@@ -321,21 +231,9 @@ export default function ExpenseTable() {
                 Refresh
               </button>
               <button
-                onClick={exportToPDF}
-                disabled={exporting || loading}
-                className="flex items-center gap-2 rounded-full border border-[#D97757] bg-[#D97757] px-4 py-1.5 text-sm text-[#6B6457] hover:bg-[#C76A4A] disabled:opacity-50"
-              >
-                {exporting ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Download size={14} />
-                )}
-                Export PDF
-              </button>
-              <button
                 onClick={handlePrint}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-full border border-[#6B86A8] bg-[#6B86A8] px-4 py-1.5 text-sm text-white hover:bg-[#5A7598] disabled:opacity-50"
+                className="flex items-center gap-2 rounded-full border border-[#6B86A8] bg-[#6B86A8] px-4 py-1.5 text-sm text-[#6b6457] hover:bg-[#5A7598] disabled:opacity-50"
               >
                 <Printer size={14} />
                 Print

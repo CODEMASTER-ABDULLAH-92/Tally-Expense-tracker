@@ -3,8 +3,8 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight, Loader2, RefreshCw, X, Plus, Minus, Download, Printer } from "lucide-react";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+// import html2canvas from 'html2canvas';
+// import { jsPDF } from 'jspdf';
 
 const categories = [
   { key: "food", label: "Food", color: "#8A9A7E" },

@@ -1,10 +1,10 @@
 "use client"
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight, Loader2, RefreshCw, X, Plus, Minus, Download, Printer } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, RefreshCw, X, Plus, Minus, Printer } from "lucide-react";
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
-// import html2canvas from 'html2canvas';
-// import { jsPDF } from 'jspdf';
 
 const categories = [
   { key: "food", label: "Food", color: "#8A9A7E" },
@@ -45,12 +45,33 @@ export default function ExpenseTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedDays, setExpandedDays] = useState({});
-  const [exporting, setExporting] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [token, setToken] = useState(null);
   const tableRef = useRef(null);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // Check for token on component mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem('token');
+    if (storedToken) {
+      setToken(storedToken);
+      setIsAuthenticated(true);
+    } else {
+      setIsAuthenticated(false);
+      setError("Please log in to view your expenses");
+      toast.warning('Please log in to view your expenses', {
+        position: "top-right",
+        autoClose: 4000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    }
+  }, []);
 
   const days = useMemo(() => {
     return Array.from({ length: daysInMonth }, (_, i) => {
@@ -65,6 +86,12 @@ export default function ExpenseTable() {
   }, [year, month, daysInMonth]);
 
   const fetchMonthData = useCallback(async () => {
+    if (!isAuthenticated || !token) {
+      setLoading(false);
+      setError("Please log in to view your expenses");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -73,10 +100,18 @@ export default function ExpenseTable() {
       const endDate = getDateKey(year, month, daysInMonth);
 
       const response = await fetch(
-        `/api/expense?startDate=${startDate}&endDate=${endDate}&limit=1000`
+        `/api/expense?startDate=${startDate}&endDate=${endDate}&limit=1000`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
       );
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error("Session expired. Please log in again.");
+        }
         throw new Error("Failed to fetch expenses");
       }
 
@@ -105,24 +140,56 @@ export default function ExpenseTable() {
     } catch (err) {
       console.error("Error fetching expenses:", err);
       setError(err.message);
+      toast.error(err.message || 'Failed to load expenses', {
+        position: "top-right",
+        autoClose: 4000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     } finally {
       setLoading(false);
     }
-  }, [year, month, daysInMonth]);
+  }, [year, month, daysInMonth, isAuthenticated, token]);
 
   useEffect(() => {
-    fetchMonthData();
-  }, [fetchMonthData]);
+    if (isAuthenticated && token) {
+      fetchMonthData();
+    } else {
+      setLoading(false);
+    }
+  }, [fetchMonthData, isAuthenticated, token]);
 
   const deleteExpense = async (dateKey, category, expenseId) => {
+    if (!isAuthenticated || !token) {
+      toast.warning('Please log in to delete expenses', {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+      return;
+    }
+
     if (!confirm("Delete this expense?")) return;
 
     try {
       const response = await fetch(`/api/expense/${expenseId}`, {
         method: "DELETE",
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
 
-      if (!response.ok) throw new Error("Failed to delete expense");
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error("Session expired. Please log in again.");
+        }
+        throw new Error("Failed to delete expense");
+      }
 
       setData((prev) => {
         const newData = { ...prev };
@@ -139,9 +206,25 @@ export default function ExpenseTable() {
         }
         return newData;
       });
+
+      toast.success('Expense deleted successfully', {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     } catch (err) {
       console.error("Error deleting expense:", err);
-      setError(err.message);
+      toast.error(err.message || 'Failed to delete expense', {
+        position: "top-right",
+        autoClose: 4000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     }
   };
 
@@ -190,6 +273,18 @@ export default function ExpenseTable() {
 
   // Print function
   const handlePrint = () => {
+    if (!isAuthenticated) {
+      toast.warning('Please log in to print expenses', {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+      return;
+    }
+
     // Expand all days before printing
     const allDateKeys = days.map(d => d.dateKey);
     const expandedState = {};
@@ -209,9 +304,38 @@ export default function ExpenseTable() {
     }, 300);
   };
 
+  // Render login required state
+  if (!isAuthenticated) {
+    return (
+      <>
+        <Navbar />
+        <ToastContainer />
+        <section className="bg-[#F5F3EC] px-6 py-20 lg:px-8 min-h-screen">
+          <div className="mx-auto max-w-2xl">
+            <div className="rounded-2xl border border-[#E3DFD2] bg-white p-8 text-center shadow-[0_20px_50px_-30px_rgba(34,31,27,0.15)]">
+              <div className="mb-4 text-6xl">🔒</div>
+              <h2 className="font-serif text-2xl text-[#221F1B] mb-2">Authentication Required</h2>
+              <p className="text-[#6B6457] mb-6">
+                Please log in to view and manage your expenses.
+              </p>
+              <button
+                onClick={() => window.location.href = '/login'}
+                className="inline-flex items-center gap-2 rounded-full bg-[#D97757] px-6 py-3 text-sm font-medium text-white hover:bg-[#C2613F] transition-colors"
+              >
+                Go to Login
+              </button>
+            </div>
+          </div>
+        </section>
+        <Footer />
+      </>
+    );
+  }
+
   return (
     <>
       <Navbar />
+      <ToastContainer />
       <section className="bg-[#F5F3EC] px-6 py-10 lg:px-8 print:bg-white print:px-2 print:py-2">
         <div className="mx-auto max-w-7xl">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-4 print:hidden">
@@ -233,7 +357,7 @@ export default function ExpenseTable() {
               <button
                 onClick={handlePrint}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-full border border-[#6B86A8] bg-[#6B86A8] px-4 py-1.5 text-sm text-[#6b6457] hover:bg-[#5A7598] disabled:opacity-50"
+                className="flex items-center gap-2 rounded-full bg-[#6B86A8] px-4 py-1.5 text-sm text-white hover:bg-[#5A7598] disabled:opacity-50 transition-colors"
               >
                 <Printer size={14} />
                 Print
@@ -271,6 +395,14 @@ export default function ExpenseTable() {
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="h-8 w-8 animate-spin text-[#D97757]" />
                 <span className="ml-3 text-[#6B6457]">Loading expenses...</span>
+              </div>
+            ) : Object.keys(data).length === 0 ? (
+              <div className="py-16 text-center">
+                <div className="text-4xl mb-3">📊</div>
+                <h3 className="font-serif text-xl text-[#221F1B] mb-1">No expenses yet</h3>
+                <p className="text-[#8A8473] text-sm">
+                  Start tracking your expenses for {monthNames[month]} {year}
+                </p>
               </div>
             ) : (
               <div className="max-h-[640px] overflow-auto print:max-h-none print:overflow-visible" ref={tableRef}>
